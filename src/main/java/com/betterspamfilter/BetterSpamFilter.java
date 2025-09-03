@@ -16,6 +16,9 @@ import net.runelite.api.events.ScriptCallbackEvent;
 import net.runelite.api.MessageNode;
 
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Slf4j
 @PluginDescriptor(
@@ -38,6 +41,7 @@ public class BetterSpamFilter extends Plugin {
         log.info("Plugin stopped!");
     }
 
+    // For textbox chat. It is handled separately from overhead chat.
     @Subscribe
     public void onScriptCallbackEvent(ScriptCallbackEvent event) {
         if (!event.getEventName().equals("chatFilterCheck")) {
@@ -49,14 +53,17 @@ public class BetterSpamFilter extends Plugin {
         Object[] objectStack = client.getObjectStack();
         int objectStackSize = client.getObjectStackSize();
 
-        final int messageId = intStack[intStackSize - 1];
         String message = (String) objectStack[objectStackSize - 1];
+
+        final int messageId = intStack[intStackSize - 1];
 
         final MessageNode messageNode = client.getMessages().get(messageId);
 
-        String sender = messageNode.getSender();
+        String playerName = messageNode.getName();
 
-        isSpam = message.contains("donations") || message.contains("Dancing for money") || message.contains("Dancing for items");
+        int combatLevel = combatLevel(playerName);
+        message =(message.toLowerCase()); // To make it case in-sensitive.
+        boolean isSpam = isSpam(message, combatLevel);
 
         if (isSpam) {
             intStack[intStackSize - 3] = 0;
@@ -67,21 +74,62 @@ public class BetterSpamFilter extends Plugin {
 
     }
 
+    // For overhead chat.
     @Subscribe
     public void onOverheadTextChanged(OverheadTextChanged event) {
         String message = event.getOverheadText();
 
-        isSpam = message.contains("donations") || message.contains("Dancing for money") || message.contains("Dancing for items");
+        String playerName = event.getActor().getName();
+
+        int combatLevel = combatLevel(playerName);
+        message =(message.toLowerCase()); // To make it case in-sensitive.
+        boolean isSpam = isSpam(message, combatLevel);
 
         if (isSpam) {
             event.getActor().setOverheadText(" ");
         }
     }
 
-    private boolean isSpam;
-
-    @Provides
-    BetterSpamFilterConfig provideConfig(ConfigManager configManager) {
-        return configManager.getConfig(BetterSpamFilterConfig.class);
+    public List<Player> getPlayers() {
+        return
+                client.getLocalPlayer().getWorldView().players().stream().collect(Collectors.toList());
     }
-}
+
+    public int combatLevel(String playerName) {
+
+        Player matchingPlayer;
+
+        List<Player> playerList = getPlayers();
+
+        int combatLevel = 0;
+
+        if (playerList != null && playerName != null) {
+
+            Optional<Player> playerOptional = playerList.stream()
+                    .filter(player -> player != null &&
+                            player.getName() != null &&
+                            player.getName().equalsIgnoreCase(playerName)) // Names can be case-insensitive.
+                    .findFirst(); // The first match should do.
+
+            // Check if a player was found in the Optional.
+            if (playerOptional.isPresent()) {
+                matchingPlayer = playerOptional.get();
+                combatLevel = matchingPlayer.getCombatLevel();
+            }
+        }
+        return combatLevel;
+    }
+
+    public boolean isSpam(String message, int combatLevel) {
+        return  message.contains(("donations")) ||
+                message.contains("dancing for") ||
+                message.contains("@@@") ||
+                message.contains("doubling") ||
+                (combatLevel > 0 && combatLevel < 10);
+    }
+
+        @Provides
+        BetterSpamFilterConfig provideConfig (ConfigManager configManager){
+            return configManager.getConfig(BetterSpamFilterConfig.class);
+        }
+    }
