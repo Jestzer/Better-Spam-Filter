@@ -18,6 +18,8 @@ import net.runelite.api.MessageNode;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -120,12 +122,25 @@ public class BetterSpamFilter extends Plugin {
         return combatLevel;
     }
 
+    private static final Pattern MONEY_REQUEST_PATTERN = Pattern.compile(
+            "need \\d+[km]",
+            Pattern.CASE_INSENSITIVE // Flag for case-insensitive matching
+    );
+
+
     public boolean isSpam(String message, int combatLevel) {
-        return  message.contains(("donations")) ||
-                message.contains("dancing for") ||
+        boolean exactText = message.contains("donations") ||
+                message.contains("dancing for") || // Covers "dancing for money/items"
                 message.contains("@@@") ||
                 message.contains("doubling") ||
-                (combatLevel > 0 && combatLevel < 10);
+                (message.contains("need") || message.contains("got") && message.contains("bond"));
+
+        Matcher matcher = MONEY_REQUEST_PATTERN.matcher(message);
+        boolean isAskingForMoney = matcher.find();
+
+        boolean isLowLevel = (combatLevel > 0 && combatLevel < 10);
+
+        return exactText || isAskingForMoney || isLowLevel;
     }
 
         @Provides
